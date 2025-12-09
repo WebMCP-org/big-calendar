@@ -1,284 +1,193 @@
-# Big Calendar
+# Big Calendar + WebMCP Demo
 
-A feature-rich calendar application built with Next.js, TypeScript, and Tailwind CSS. This project provides a modern, responsive interface for managing events and schedules with multiple viewing options.
+This is a fork of [lramos33/big-calendar](https://github.com/lramos33/big-calendar) with WebMCP integration added. It demonstrates how to make a web app controllable by AI agents.
 
-<p align="center">
-  <a href="https://www.buymeacoffee.com/lramos33" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
-</p>
+## What's WebMCP?
 
-## Preview
+WebMCP is a W3C standard (currently incubating) that adds `navigator.modelContext` to browsers. This API lets websites expose JavaScript functions as "tools" that AI agents can discover and call.
 
-![image](public/preview_1.png)
-![image](public/preview_2.png)
-![image](public/preview_3.png)
-![image](public/preview_4.png)
-![image](public/preview_5.png)
-
-## Features
-
-- 📅 Multiple calendar views:
-
-  - Agenda view
-  - Year view
-  - Month view
-  - Week view with detailed time slots
-  - Day view with hourly breakdown
-
-- 🎨 Event customization:
-
-  - Multiple color options for events
-  - Three badge display variants (dot, colored and mixed)
-  - Support for single and multi-day events
-
-- 🔄 Drag and Drop:
-
-  - Easily reschedule events by dragging and dropping
-  - Move events between days in month view
-  - Adjust event timing in week/day views
-  - Visual feedback during dragging operations
-
-- 👥 User management:
-
-  - Filter events by user
-  - View all users's events simultaneously
-  - User avatars and profile integration
-
-- ⚡ Real-time features:
-
-  - Live time indicator
-  - Current event highlighting
-  - Dynamic event positioning
-
-- ⏰ Time customization:
-
-  - Configurable working hours with distinct styling
-  - Adjustable visible hours range
-  - Focus on relevant time periods
-
-- 🎯 UI/UX features:
-  - Responsive design for all screen sizes
-  - Intuitive navigation between dates
-  - Clean and modern interface
-  - Dark mode support
-
-## Tech stack
-
-- **Framework**: Next.js 14
-- **Language**: TypeScript
-- **Styling**: Tailwind v3
-- **Date Management**: date-fns
-- **UI Components**: shadcn/ui
-- **State Management**: React Context
-
-## Getting started
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/lramos33/big-calendar.git
-cd calendar-app
+```typescript
+// Register a tool that AI agents can call
+navigator.modelContext.registerTool({
+  name: "create_event",
+  description: "Create a calendar event",
+  inputSchema: { title: z.string(), date: z.string() },
+  async execute({ title, date }) {
+    // Your existing code
+    await createEvent(title, date);
+    return { content: [{ type: "text", text: "Event created" }] };
+  }
+});
 ```
 
-2. Install dependencies:
+The `@mcp-b/global` package polyfills this API until browsers ship native support.
+
+## What This Demo Shows
+
+1. **Tool Registration** - 15 tools for calendar CRUD, navigation, and settings
+2. **React Integration** - Using `useWebMCP` hook from `@mcp-b/react-webmcp`
+3. **Embedded Agent** - Drop-in AI chat widget from `@mcp-b/embedded-agent`
+4. **Next.js Setup** - Polyfill placement, client components, SSR handling
+
+## Quick Start
 
 ```bash
+git clone https://github.com/WebMCP-org/big-calendar
+cd big-calendar
 npm install
-```
-
-3. Start the development server:
-
-```bash
+cp .env.example .env  # Add NEXT_PUBLIC_ANTHROPIC_API_KEY
 npm run dev
 ```
 
-or
+Open http://localhost:3000. Click the chat widget. Ask it to create an event.
 
-```bash
-npm run turbo
-```
+## Key Files
 
-4. Open your browser and navigate to `http://localhost:3000` to view the application.
+| File | What It Does |
+|------|--------------|
+| `src/app/layout.tsx` | Imports `@mcp-b/global` polyfill (must be first) |
+| `src/app/(calendar)/layout.tsx` | Renders tools component + embedded agent |
+| `src/calendar/components/calendar-webmcp-tools.tsx` | Registers all 15 tools |
+| `src/components/embedded-agent.tsx` | Renders the AI chat widget |
 
-## Project structure
-
-The project structure is organized as follows:
-
-```
-src/
-├── app/
-├── calendar/                     # All files related to calendar are in this folder
-│   ├── components/
-│   │   ├── agenda-view/          # Agenda view components
-│   │   ├── dialogs/              # Dialogs components
-│   │   ├── dnd/                  # Drag and drop components
-│   │   ├── header/               # Calendar header components
-│   │   ├── month-view/           # Month view components
-│   │   ├── week-and-day-view/    # Week and day view components
-│   │   └── year-view/            # Year view components
-│   ├── contexts/                 # Calendar context and state management
-│   ├── helpers/                  # Utility functions
-│   ├── interfaces/               # TypeScript interfaces
-│   └── types/                    # TypeScript types
-└── components/                   # Components not related to calendar eg: ui and layout components
-```
-
-## How to implement in your project
-
-### Installation
-
-1. Copy the required folders to your project:
-
-```
-src/calendar/         # Core calendar functionality
-src/components/ui/    # UI components used by the calendar
-src/hooks/            # Required hooks like use-disclosure
-```
-
-2. Install dependencies missing in your project
-
-### Basic setup
-
-1. **Set up the `CalendarProvider`**
-
-   Wrap your application or page with the `CalendarProvider`:
+## How Tools Are Registered
 
 ```tsx
-import { CalendarProvider } from "@/calendar/contexts/calendar-context";
+// src/calendar/components/calendar-webmcp-tools.tsx
+"use client";
 
-// Fetch your events and users data
-const events = await getEvents();
-const users = await getUsers();
-
-export default function Layout({ children }) {
-  return (
-    <CalendarProvider users={users} events={events}>
-      {children}
-    </CalendarProvider>
-  );
-}
-```
-
-2. **Add a `CalendarView`**
-
-   Use the `ClientContainer` to render a specific view:
-
-```tsx
-import { ClientContainer } from "@/calendar/components/client-container";
-
-export default function CalendarPage() {
-  return <ClientContainer view="month" />;
-}
-```
-
-### Views configuration
-
-The calendar supports five different views, each can be used with the `ClientContainer` component:
-
-```tsx
-// Day view
-<ClientContainer view="day" />
-
-// Week view
-<ClientContainer view="week" />
-
-// Month view
-<ClientContainer view="month" />
-
-// Year view
-<ClientContainer view="year" />
-
-// Agenda view
-<ClientContainer view="agenda" />
-```
-
-### Data structure
-
-1. **Events Format**
-
-   Events should follow this interface (you can modify it as you want, but the calendar will expect these fields):
-
-```tsx
-interface IEvent {
-  id: string;
-  title: string;
-  description: string;
-  startDate: string; // ISO string
-  endDate: string; // ISO string
-  color: "blue" | "green" | "red" | "yellow" | "purple" | "orange";
-  user: {
-    id: string;
-    name: string;
-  };
-}
-```
-
-2. **Users format**
-
-   Users should follow this interface (you can modify it as you want, but the calendar will expect these fields):
-
-```tsx
-interface IUser {
-  id: string;
-  name: string;
-  picturePath?: string; // Optional avatar image
-}
-```
-
-### Customizing the calendar
-
-1. **Badge Variants**
-
-   You can control the event display style with the `ChangeBadgeVariantInput` component:
-
-```tsx
-import { ChangeBadgeVariantInput } from "@/calendar/components/change-badge-variant-input";
-
-// Place this anywhere in your project tree inside the CalendarProvider
-<ChangeBadgeVariantInput />;
-```
-
-2. **Creating events**
-
-   Implement your own event creation by modifying the `onSubmit` handler in the `AddEventDialog` component.
-
-### Using the Calendar Context
-
-You can access and control the calendar state from any component using the `useCalendar` hook:
-
-```tsx
+import { useWebMCP } from "@mcp-b/react-webmcp";
+import { z } from "zod";
 import { useCalendar } from "@/calendar/contexts/calendar-context";
 
-function MyComponent() {
-  const { selectedDate, setSelectedDate, selectedUserId, setSelectedUserId, events, users, badgeVariant, setBadgeVariant } = useCalendar();
+export function CalendarWebMCPTools() {
+  const { events, setLocalEvents } = useCalendar();
 
-  // Your component logic
+  // This registers a tool that AI agents can call
+  useWebMCP({
+    name: "get_events",
+    description: "Get calendar events for a specific month",
+    inputSchema: {
+      month: z.string().describe("Month in YYYY-MM format"),
+    },
+    handler: async ({ month }) => {
+      const filtered = events.filter(e => e.startDate.startsWith(month));
+      return { events: filtered };
+    },
+  });
+
+  useWebMCP({
+    name: "create_event",
+    description: "Create a new calendar event",
+    inputSchema: {
+      title: z.string(),
+      startDate: z.string(),
+      endDate: z.string(),
+      color: z.enum(["blue", "green", "red", "yellow", "purple", "orange"]),
+    },
+    handler: async ({ title, startDate, endDate, color }) => {
+      const newEvent = { id: Date.now(), title, startDate, endDate, color };
+      setLocalEvents(prev => [...prev, newEvent]);
+      return { success: true, eventId: newEvent.id };
+    },
+  });
+
+  return null; // This component just registers tools, renders nothing
 }
 ```
 
-### Example implementation
+## How the Embedded Agent Works
 
 ```tsx
-// pages/calendar.tsx
-import { CalendarProvider } from "@/calendar/contexts/calendar-context";
-import { ClientContainer } from "@/calendar/components/client-container";
-import { ChangeBadgeVariantInput } from "@/calendar/components/change-badge-variant-input";
+// src/components/embedded-agent.tsx
+"use client";
 
-export default function CalendarPage({ events, users }) {
+import dynamic from "next/dynamic";
+
+// Must use dynamic import with ssr: false - uses browser APIs
+const EmbeddedAgent = dynamic(
+  () => import("@mcp-b/embedded-agent/web-component").then(m => m.EmbeddedAgent),
+  { ssr: false }
+);
+
+export function CalendarEmbeddedAgent() {
   return (
-    <CalendarProvider events={events} users={users}>
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-4 p-4">
-        <ClientContainer view="month" />
-        <ChangeBadgeVariantInput />
-      </div>
-    </CalendarProvider>
+    <EmbeddedAgent
+      appId="big-calendar-demo"
+      devMode={{
+        anthropicApiKey: process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || "",
+      }}
+    />
   );
 }
 ```
 
-## Contributing
+For production, remove `devMode` and use your app ID from [webmcp.ai](https://webmcp.ai).
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Next.js Gotchas
 
-<p align="center">
-  Made by Leonardo Ramos 👋 <a href="https://x.com/leoo_ramos1">Get in touch!</a>
-<p>
+1. **Root layout must be a client component** - The polyfill needs browser APIs
+2. **Import `@mcp-b/global` first** - Before any other imports in root layout
+3. **Tools need React Context** - Register them inside your providers
+4. **Embedded agent needs `ssr: false`** - It accesses `window`
+
+```tsx
+// src/app/layout.tsx
+'use client'
+
+import '@mcp-b/global'; // MUST be first import
+import "./globals.css";
+// ... rest of imports
+```
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_events` | Get events filtered by month |
+| `get_event_by_id` | Get single event details |
+| `create_event` | Create new event |
+| `update_event` | Update existing event |
+| `delete_event` | Delete event |
+| `get_users` | List available users |
+| `get_calendar_state` | Get current date, selected date, filters |
+| `get_todays_events` | Get today's schedule |
+| `get_event_colors` | List available colors |
+| `navigate_to_date` | Jump to specific date |
+| `navigate_to_today` | Jump to today |
+| `navigate_to_event` | Show specific event |
+| `set_user_filter` | Filter by user |
+| `set_badge_variant` | Change event display style |
+| `set_visible_hours` | Adjust time range |
+
+## What Changed From the Original
+
+The original [big-calendar](https://github.com/lramos33/big-calendar) is a standalone calendar UI. This fork adds:
+
+- `@mcp-b/global` - Polyfill for `navigator.modelContext`
+- `@mcp-b/react-webmcp` - React hooks for tool registration
+- `@mcp-b/embedded-agent` - AI chat widget
+- `calendar-webmcp-tools.tsx` - Tool definitions
+- `embedded-agent.tsx` - Agent component
+- Modified layouts to wire everything together
+
+The calendar itself is unchanged. WebMCP just exposes its functionality to AI agents.
+
+## Other WebMCP Demos
+
+- [webMCP-Legit-exploration](https://github.com/WebMCP-org/webMCP-Legit-exploration) - Collaboration with Legit Control
+- [mcp-ui-webmcp](https://github.com/WebMCP-org/mcp-ui-webmcp) - Bidirectional MCP-UI integration
+- [examples](https://github.com/WebMCP-org/examples) - More WebMCP examples
+
+## Learn More
+
+- [WebMCP Docs](https://docs.mcp-b.ai) - Full documentation
+- [Quick Start](https://docs.mcp-b.ai/quickstart) - Add WebMCP to your site
+- [React Integration](https://docs.mcp-b.ai/packages/react-webmcp) - useWebMCP hook
+- [Best Practices](https://docs.mcp-b.ai/best-practices) - Tool design guidelines
+- [W3C Proposal](https://github.com/webmachinelearning/webmcp) - The standard
+
+## Credits
+
+- Calendar UI: [Leonardo Ramos](https://github.com/lramos33)
+- WebMCP: [WebMCP-org](https://github.com/WebMCP-org)

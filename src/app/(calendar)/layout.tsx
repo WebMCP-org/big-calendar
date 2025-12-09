@@ -1,12 +1,20 @@
+/**
+ * Calendar Feature Layout
+ *
+ * Wraps all calendar pages with CalendarProvider, WebMCP tools, and embedded agent.
+ *
+ * @see https://docs.mcp-b.ai/frameworks/react for integration patterns
+ */
+
 import { Settings } from "lucide-react";
 
 import { CalendarProvider } from "@/calendar/contexts/calendar-context";
-
 import { ChangeBadgeVariantInput } from "@/calendar/components/change-badge-variant-input";
 import { ChangeVisibleHoursInput } from "@/calendar/components/change-visible-hours-input";
 import { ChangeWorkingHoursInput } from "@/calendar/components/change-working-hours-input";
+import { CalendarWebMCPTools } from "@/calendar/components/calendar-webmcp-tools";
+import { CalendarEmbeddedAgent } from "@/components/embedded-agent";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-
 import { getEvents, getUsers } from "@/calendar/requests";
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
@@ -14,6 +22,8 @@ export default async function Layout({ children }: { children: React.ReactNode }
 
   return (
     <CalendarProvider users={users} events={events}>
+      <CalendarWebMCPTools />
+      <CalendarEmbeddedAgent />
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-4 px-8 py-4">
         {children}
 

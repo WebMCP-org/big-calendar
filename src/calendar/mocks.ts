@@ -26,201 +26,279 @@ export const USERS_MOCK: IUser[] = [
   },
 ];
 
-const COLORS: TEventColor[] = ["blue", "green", "red", "yellow", "purple", "orange", "gray"];
+// Fixed events for December 2025 and January 2026
+export const CALENDAR_ITEMS_MOCK: IEvent[] = [
+  // December 2025
+  {
+    id: 1,
+    title: "Team stand-up",
+    description: "Daily sync with the engineering team",
+    startDate: "2025-12-08T09:00:00.000Z",
+    endDate: "2025-12-08T09:30:00.000Z",
+    color: "blue",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 2,
+    title: "Project planning",
+    description: "Q1 2026 roadmap discussion",
+    startDate: "2025-12-09T14:00:00.000Z",
+    endDate: "2025-12-09T15:30:00.000Z",
+    color: "purple",
+    user: USERS_MOCK[1],
+  },
+  {
+    id: 3,
+    title: "Client presentation",
+    description: "Demo for Acme Corp",
+    startDate: "2025-12-10T10:00:00.000Z",
+    endDate: "2025-12-10T11:00:00.000Z",
+    color: "green",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 4,
+    title: "Lunch with team",
+    description: "Holiday lunch at Italian restaurant",
+    startDate: "2025-12-11T12:00:00.000Z",
+    endDate: "2025-12-11T13:30:00.000Z",
+    color: "yellow",
+    user: USERS_MOCK[2],
+  },
+  {
+    id: 5,
+    title: "Code review",
+    description: "Review PR #234 - new feature implementation",
+    startDate: "2025-12-12T15:00:00.000Z",
+    endDate: "2025-12-12T16:00:00.000Z",
+    color: "orange",
+    user: USERS_MOCK[3],
+  },
+  {
+    id: 6,
+    title: "Doctor's appointment",
+    description: "Annual check-up",
+    startDate: "2025-12-15T09:00:00.000Z",
+    endDate: "2025-12-15T10:00:00.000Z",
+    color: "red",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 7,
+    title: "Sprint retrospective",
+    description: "Review of sprint 23",
+    startDate: "2025-12-16T14:00:00.000Z",
+    endDate: "2025-12-16T15:00:00.000Z",
+    color: "blue",
+    user: USERS_MOCK[1],
+  },
+  {
+    id: 8,
+    title: "Holiday party",
+    description: "Company holiday celebration",
+    startDate: "2025-12-18T17:00:00.000Z",
+    endDate: "2025-12-18T20:00:00.000Z",
+    color: "green",
+    user: USERS_MOCK[2],
+  },
+  {
+    id: 9,
+    title: "Year-end review",
+    description: "Performance review with manager",
+    startDate: "2025-12-19T11:00:00.000Z",
+    endDate: "2025-12-19T12:00:00.000Z",
+    color: "purple",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 10,
+    title: "Gym workout",
+    description: "Leg day",
+    startDate: "2025-12-20T07:00:00.000Z",
+    endDate: "2025-12-20T08:00:00.000Z",
+    color: "orange",
+    user: USERS_MOCK[3],
+  },
+  {
+    id: 11,
+    title: "Christmas Eve dinner",
+    description: "Family gathering",
+    startDate: "2025-12-24T18:00:00.000Z",
+    endDate: "2025-12-24T22:00:00.000Z",
+    color: "red",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 12,
+    title: "Christmas Day",
+    description: "Holiday - Office closed",
+    startDate: "2025-12-25T00:00:00.000Z",
+    endDate: "2025-12-25T23:59:00.000Z",
+    color: "red",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 13,
+    title: "Boxing Day shopping",
+    description: "Post-holiday sales",
+    startDate: "2025-12-26T10:00:00.000Z",
+    endDate: "2025-12-26T14:00:00.000Z",
+    color: "yellow",
+    user: USERS_MOCK[2],
+  },
+  {
+    id: 14,
+    title: "New Year's Eve party",
+    description: "Countdown celebration",
+    startDate: "2025-12-31T20:00:00.000Z",
+    endDate: "2026-01-01T01:00:00.000Z",
+    color: "purple",
+    user: USERS_MOCK[1],
+  },
 
-const EVENTS = [
-  "Doctor's appointment",
-  "Dental cleaning",
-  "Eye exam",
-  "Therapy session",
-  "Business meeting",
-  "Team stand-up",
-  "Project deadline",
-  "Weekly report submission",
-  "Client presentation",
-  "Marketing strategy review",
-  "Networking event",
-  "Sales call",
-  "Investor pitch",
-  "Board meeting",
-  "Employee training",
-  "Performance review",
-  "One-on-one meeting",
-  "Lunch with a colleague",
-  "HR interview",
-  "Conference call",
-  "Web development sprint planning",
-  "Software deployment",
-  "Code review",
-  "QA testing session",
-  "Cybersecurity audit",
-  "Server maintenance",
-  "API integration update",
-  "Data backup",
-  "Cloud migration",
-  "System upgrade",
-  "Content planning session",
-  "Product launch",
-  "Customer support review",
-  "Team building activity",
-  "Legal consultation",
-  "Budget review",
-  "Financial planning session",
-  "Tax filing deadline",
-  "Investor relations update",
-  "Partnership negotiation",
-  "Medical check-up",
-  "Vaccination appointment",
-  "Blood donation",
-  "Gym workout",
-  "Yoga class",
-  "Physical therapy session",
-  "Nutrition consultation",
-  "Personal trainer session",
-  "Parent-teacher meeting",
-  "School open house",
-  "College application deadline",
-  "Final exam",
-  "Graduation ceremony",
-  "Job interview",
-  "Internship orientation",
-  "Office relocation",
-  "Business trip",
-  "Flight departure",
-  "Hotel check-in",
-  "Vacation planning",
-  "Birthday party",
-  "Wedding anniversary",
-  "Family reunion",
-  "Housewarming party",
-  "Community volunteer work",
-  "Charity fundraiser",
-  "Religious service",
-  "Concert attendance",
-  "Theater play",
-  "Movie night",
-  "Sporting event",
-  "Football match",
-  "Basketball game",
-  "Tennis practice",
-  "Marathon training",
-  "Cycling event",
-  "Fishing trip",
-  "Camping weekend",
-  "Hiking expedition",
-  "Photography session",
-  "Art workshop",
-  "Cooking class",
-  "Book club meeting",
-  "Grocery shopping",
-  "Car maintenance",
-  "Home renovation meeting",
+  // January 2026
+  {
+    id: 15,
+    title: "New Year's Day",
+    description: "Holiday - Office closed",
+    startDate: "2026-01-01T00:00:00.000Z",
+    endDate: "2026-01-01T23:59:00.000Z",
+    color: "green",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 16,
+    title: "Back to work",
+    description: "First day back after holidays",
+    startDate: "2026-01-02T09:00:00.000Z",
+    endDate: "2026-01-02T17:00:00.000Z",
+    color: "blue",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 17,
+    title: "Team stand-up",
+    description: "Weekly sync",
+    startDate: "2026-01-06T09:00:00.000Z",
+    endDate: "2026-01-06T09:30:00.000Z",
+    color: "blue",
+    user: USERS_MOCK[1],
+  },
+  {
+    id: 18,
+    title: "Q1 kickoff meeting",
+    description: "Planning for the new quarter",
+    startDate: "2026-01-07T10:00:00.000Z",
+    endDate: "2026-01-07T12:00:00.000Z",
+    color: "purple",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 19,
+    title: "Dentist appointment",
+    description: "Regular cleaning",
+    startDate: "2026-01-08T14:00:00.000Z",
+    endDate: "2026-01-08T15:00:00.000Z",
+    color: "red",
+    user: USERS_MOCK[2],
+  },
+  {
+    id: 20,
+    title: "Product demo",
+    description: "Demo new features to stakeholders",
+    startDate: "2026-01-09T15:00:00.000Z",
+    endDate: "2026-01-09T16:00:00.000Z",
+    color: "green",
+    user: USERS_MOCK[3],
+  },
+  {
+    id: 21,
+    title: "Yoga class",
+    description: "Morning yoga session",
+    startDate: "2026-01-10T07:00:00.000Z",
+    endDate: "2026-01-10T08:00:00.000Z",
+    color: "yellow",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 22,
+    title: "1:1 with manager",
+    description: "Monthly check-in",
+    startDate: "2026-01-13T11:00:00.000Z",
+    endDate: "2026-01-13T11:30:00.000Z",
+    color: "orange",
+    user: USERS_MOCK[1],
+  },
+  {
+    id: 23,
+    title: "Design review",
+    description: "Review new UI mockups",
+    startDate: "2026-01-14T14:00:00.000Z",
+    endDate: "2026-01-14T15:30:00.000Z",
+    color: "purple",
+    user: USERS_MOCK[2],
+  },
+  {
+    id: 24,
+    title: "Team lunch",
+    description: "Welcome new team member",
+    startDate: "2026-01-15T12:00:00.000Z",
+    endDate: "2026-01-15T13:00:00.000Z",
+    color: "green",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 25,
+    title: "Sprint planning",
+    description: "Plan sprint 24",
+    startDate: "2026-01-16T10:00:00.000Z",
+    endDate: "2026-01-16T12:00:00.000Z",
+    color: "blue",
+    user: USERS_MOCK[3],
+  },
+  {
+    id: 26,
+    title: "Conference call",
+    description: "Call with remote team",
+    startDate: "2026-01-20T16:00:00.000Z",
+    endDate: "2026-01-20T17:00:00.000Z",
+    color: "gray",
+    user: USERS_MOCK[1],
+  },
+  {
+    id: 27,
+    title: "Workshop",
+    description: "AI tools workshop",
+    startDate: "2026-01-22T09:00:00.000Z",
+    endDate: "2026-01-22T12:00:00.000Z",
+    color: "purple",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 28,
+    title: "Birthday celebration",
+    description: "Alice's birthday party",
+    startDate: "2026-01-24T15:00:00.000Z",
+    endDate: "2026-01-24T16:00:00.000Z",
+    color: "yellow",
+    user: USERS_MOCK[2],
+  },
+  {
+    id: 29,
+    title: "Monthly all-hands",
+    description: "Company-wide meeting",
+    startDate: "2026-01-27T14:00:00.000Z",
+    endDate: "2026-01-27T15:00:00.000Z",
+    color: "blue",
+    user: USERS_MOCK[0],
+  },
+  {
+    id: 30,
+    title: "End of month review",
+    description: "Review January progress",
+    startDate: "2026-01-31T10:00:00.000Z",
+    endDate: "2026-01-31T11:00:00.000Z",
+    color: "orange",
+    user: USERS_MOCK[3],
+  },
 ];
-
-// This was generated by AI -- minus the part where I added my wedding as an "easter egg" :)
-const mockGenerator = (numberOfEvents: number): IEvent[] => {
-  const result: IEvent[] = [
-    {
-      id: 1204,
-      startDate: new Date("2025-09-20T00:00:00-03:00").toISOString(),
-      endDate: new Date("2025-09-20T23:59:00-03:00").toISOString(),
-      title: "My wedding :)",
-      color: "red",
-      description: "Can't wait to see the most beautiful woman in that dress!",
-      user: USERS_MOCK[0],
-    },
-  ];
-
-  let currentId = 1;
-
-  const randomUser = USERS_MOCK[Math.floor(Math.random() * USERS_MOCK.length)];
-
-  // Date range: 30 days before and after now
-  const now = new Date();
-  const startRange = new Date(now);
-  startRange.setDate(now.getDate() - 30);
-  const endRange = new Date(now);
-  endRange.setDate(now.getDate() + 30);
-
-  // Create an event happening now
-  const currentEvent = {
-    id: currentId++,
-    startDate: new Date(now.getTime() - 30 * 60000).toISOString(),
-    endDate: new Date(now.getTime() + 30 * 60000).toISOString(),
-    title: EVENTS[Math.floor(Math.random() * EVENTS.length)],
-    color: COLORS[Math.floor(Math.random() * COLORS.length)],
-    description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-    user: randomUser,
-  };
-
-  // Only add the current event if it's not on September 20th
-  if (now.getMonth() !== 8 || now.getDate() !== 20) {
-    // Month is 0-indexed (8 = September)
-    result.push(currentEvent);
-  }
-
-  // Generate the remaining events
-  let i = 0;
-  let attempts = 0;
-  const maxAttempts = numberOfEvents * 3; // Prevent infinite loop with a reasonable max attempts
-
-  while (i < numberOfEvents - 1 && attempts < maxAttempts) {
-    attempts++;
-
-    // Determine if this is a multi-day event (10% chance)
-    const isMultiDay = Math.random() < 0.1;
-
-    const startDate = new Date(startRange.getTime() + Math.random() * (endRange.getTime() - startRange.getTime()));
-
-    // Skip if the date is September 20th
-    if (startDate.getMonth() === 8 && startDate.getDate() === 20) {
-      continue;
-    }
-
-    // Set time between 8 AM and 8 PM
-    startDate.setHours(8 + Math.floor(Math.random() * 8), Math.floor(Math.random() * 4) * 15, 0, 0);
-
-    const endDate = new Date(startDate);
-
-    if (isMultiDay) {
-      // Multi-day event: Add 1-4 days
-      const additionalDays = Math.floor(Math.random() * 4) + 1;
-      endDate.setDate(startDate.getDate() + additionalDays);
-
-      // Ensure multi-day events don't cross September 20th
-      const endMonth = endDate.getMonth();
-      const endDay = endDate.getDate();
-      const startMonth = startDate.getMonth();
-      const startDay = startDate.getDate();
-
-      // Check if event spans across September 20th
-      if (
-        (startMonth === 8 && startDay < 20 && (endMonth > 8 || (endMonth === 8 && endDay >= 20))) ||
-        (endMonth === 8 && endDay >= 20 && (startMonth < 8 || (startMonth === 8 && startDay < 20)))
-      ) {
-        continue;
-      }
-
-      endDate.setHours(8 + Math.floor(Math.random() * 12), Math.floor(Math.random() * 4) * 15, 0, 0);
-    } else {
-      const durationMinutes = (Math.floor(Math.random() * 11) + 2) * 15; // 30 to 180 minutes, multiple of 15
-      endDate.setTime(endDate.getTime() + durationMinutes * 60 * 1000);
-    }
-
-    result.push({
-      id: currentId++,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      title: EVENTS[Math.floor(Math.random() * EVENTS.length)],
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
-      description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-      user: USERS_MOCK[Math.floor(Math.random() * USERS_MOCK.length)],
-    });
-
-    i++;
-  }
-
-  return result;
-};
-
-export const CALENDAR_ITENS_MOCK: IEvent[] = mockGenerator(80);
