@@ -40,3 +40,7 @@ next-env.d.ts
 
 # yarn
 yarn.lock
+
+# OpenNext
+.open-next
+.dev.vars
