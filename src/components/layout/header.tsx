@@ -138,9 +138,9 @@ export function Header() {
 
           <div className="mx-2 h-6 w-px bg-border" />
 
-          {/* GitHub */}
+          {/* GitHub - Source Code */}
           <Button size="icon" variant="ghost" asChild>
-            <Link href="https://github.com/WebMCP-org" target="_blank" title="View on GitHub">
+            <Link href="https://github.com/WebMCP-org/big-calendar" target="_blank" title="View Source Code">
               <Github size={18} />
             </Link>
           </Button>
