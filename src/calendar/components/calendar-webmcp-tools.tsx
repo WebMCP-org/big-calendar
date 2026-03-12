@@ -1,697 +1,560 @@
 "use client";
 
-/**
- * WebMCP Tools for Calendar Application
- *
- * Registers tools that allow AI agents to interact with the calendar.
- *
- * @see https://docs.mcp-b.ai/packages/react-webmcp for useWebMCP hook
- */
-
+import { useCallback } from "react";
 import { useWebMCP, useWebMCPPrompt } from "@mcp-b/react-webmcp";
-import { useRouter, usePathname } from "next/navigation";
+import { endOfDay, format, isWithinInterval, parseISO, startOfDay } from "date-fns";
+import { usePathname, useRouter } from "next/navigation";
 import { z } from "zod";
-import { format, parseISO, startOfDay, endOfDay, isWithinInterval } from "date-fns";
+
 import { useCalendar } from "@/calendar/contexts/calendar-context";
+import { useEventDialog } from "@/calendar/contexts/event-dialog-context";
 
-import type { IEvent } from "@/calendar/interfaces";
-import type { TEventColor, TBadgeVariant } from "@/calendar/types";
+import type { IEvent, IUser } from "@/calendar/interfaces";
+import type { TBadgeVariant, TEventColor, TVisibleHours } from "@/calendar/types";
 
-/** Available colors for calendar events */
-const EVENT_COLORS: TEventColor[] = ["blue", "green", "red", "yellow", "purple", "orange", "gray"];
+const EVENT_COLORS = ["blue", "green", "red", "yellow", "purple", "orange", "gray"] as const satisfies ReadonlyArray<TEventColor>;
+const BADGE_VARIANTS = ["dot", "colored", "mixed"] as const satisfies ReadonlyArray<TBadgeVariant>;
+const CALENDAR_VIEWS = ["month", "day"] as const;
+const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, idempotentHint: true, destructiveHint: false };
+const MUTATING_ANNOTATIONS = { readOnlyHint: false, idempotentHint: false, destructiveHint: false };
+const CONFIGURATION_ANNOTATIONS = { readOnlyHint: false, idempotentHint: true, destructiveHint: false };
+const DESTRUCTIVE_ANNOTATIONS = { readOnlyHint: false, idempotentHint: false, destructiveHint: true };
 
-/** Available badge display variants */
-const BADGE_VARIANTS: TBadgeVariant[] = ["dot", "colored", "mixed"];
+type CalendarView = (typeof CALENDAR_VIEWS)[number];
+type SerializedEvent = ReturnType<typeof serializeEvent>;
+type GetEventsOutput = {
+  count: number;
+  events: SerializedEvent[];
+  searchFailed?: boolean;
+  searchQuery?: string;
+};
+type CalendarInfoOutput = {
+  colors: readonly TEventColor[];
+  state: {
+    badgeVariant: TBadgeVariant;
+    selectedDateFormatted: string;
+    todayFormatted: string;
+    totalEvents: number;
+    userFilter: string;
+    visibleHours: { description: string };
+  };
+  users: Array<{ id: string; name: string }>;
+};
+type MessageOutput = { message: string };
 
-export function CalendarWebMCPTools() {
-  const {
-    events,
-    setLocalEvents,
-    users,
-    selectedDate,
-    setSelectedDate,
-    selectedUserId,
-    setSelectedUserId,
-    badgeVariant,
-    setBadgeVariant,
-    workingHours,
-    setWorkingHours,
-    visibleHours,
-    setVisibleHours,
-  } = useCalendar();
+interface CalendarToolDependencies {
+  badgeVariant: TBadgeVariant;
+  events: IEvent[];
+  navigateToDateInView: (date: Date, view?: CalendarView) => void;
+  openAddDialog: ReturnType<typeof useEventDialog>["openAddDialog"];
+  openDeleteDialog: ReturnType<typeof useEventDialog>["openDeleteDialog"];
+  openEditDialog: ReturnType<typeof useEventDialog>["openEditDialog"];
+  selectedDate: Date;
+  selectedUserId: IUser["id"] | "all";
+  setBadgeVariant: (variant: TBadgeVariant) => void;
+  setSelectedUserId: (userId: IUser["id"] | "all") => void;
+  setVisibleHours: (hours: TVisibleHours) => void;
+  users: IUser[];
+  visibleHours: TVisibleHours;
+}
 
-  const router = useRouter();
-  const pathname = usePathname();
+function parseRequiredIsoDate(value: string, label: string): Date {
+  const parsedDate = parseISO(value);
 
-  // ╔════════════════════════════════════════════════════════════════════════════╗
-  // ║                           READ OPERATIONS                                  ║
-  // ╚════════════════════════════════════════════════════════════════════════════╝
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new Error(`${label} must be a valid ISO 8601 date`);
+  }
 
-  /**
-   * Tool: get_events
-   * Retrieves calendar events with filtering by month, user, and search query.
-   * If search returns no results, falls back to showing all events for the month.
-   */
+  return parsedDate;
+}
+
+function resolveDayRange(value: string): { start: Date; end: Date } {
+  const targetDate = value === "today" ? new Date() : parseRequiredIsoDate(value, "date");
+
+  return {
+    start: startOfDay(targetDate),
+    end: endOfDay(targetDate),
+  };
+}
+
+function resolveMonthRange(month: string): { start: Date; end: Date } {
+  const [year, monthIndex] = month.split("-").map(Number);
+
+  return {
+    start: new Date(year, monthIndex - 1, 1),
+    end: new Date(year, monthIndex, 0, 23, 59, 59, 999),
+  };
+}
+
+function eventOverlapsRange(event: IEvent, range: { start: Date; end: Date }): boolean {
+  const eventStart = parseISO(event.startDate);
+  const eventEnd = parseISO(event.endDate);
+
+  return isWithinInterval(eventStart, range) || isWithinInterval(eventEnd, range) || (eventStart <= range.start && eventEnd >= range.end);
+}
+
+function filterEventsByRange(events: IEvent[], range: { start: Date; end: Date }): IEvent[] {
+  return events.filter(event => eventOverlapsRange(event, range));
+}
+
+function sortEventsChronologically(events: IEvent[]): IEvent[] {
+  return [...events].sort((left, right) => parseISO(left.startDate).getTime() - parseISO(right.startDate).getTime());
+}
+
+function serializeEvent(event: IEvent, options?: { includePicture?: boolean }) {
+  const includePicture = options?.includePicture ?? false;
+
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    startDate: event.startDate,
+    endDate: event.endDate,
+    startDateFormatted: format(parseISO(event.startDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
+    endDateFormatted: format(parseISO(event.endDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
+    color: event.color,
+    user: includePicture ? { id: event.user.id, name: event.user.name, picturePath: event.user.picturePath } : { id: event.user.id, name: event.user.name },
+  };
+}
+
+function formatEventListItem(event: SerializedEvent): string {
+  return `- [ID: ${event.id}] "${event.title}" (${event.startDateFormatted}) - ${event.user.name}`;
+}
+
+function formatEventDetails(event: SerializedEvent): string {
+  return [
+    `Event ID: ${event.id}`,
+    `Title: ${event.title}`,
+    `Assigned to: ${event.user.name}`,
+    `Start: ${event.startDateFormatted}`,
+    `End: ${event.endDateFormatted}`,
+    `Color: ${event.color}`,
+    `Description: ${event.description}`,
+  ].join("\n");
+}
+
+function formatVisibleHours(hours: TVisibleHours): string {
+  return `${hours.from}:00 - ${hours.to}:00`;
+}
+
+function requireEvent(events: IEvent[], eventId: number): IEvent {
+  const event = events.find(candidate => candidate.id === eventId);
+
+  if (!event) {
+    throw new Error(`Event with ID ${eventId} not found`);
+  }
+
+  return event;
+}
+
+function requireUser(users: IUser[], userId: string): IUser {
+  const user = users.find(candidate => candidate.id === userId);
+
+  if (!user) {
+    throw new Error(`User with ID ${userId} not found. Use get_calendar_info to see available users.`);
+  }
+
+  return user;
+}
+
+function formatMutationResult(event: IEvent, action: "created" | "updated"): string {
+  const eventDate = parseISO(event.startDate);
+
+  return [
+    `Event "${event.title}" ${action} and calendar navigated to ${format(eventDate, "MMMM d, yyyy")}`,
+    "",
+    `Event ID: ${event.id}`,
+    `Assigned to: ${event.user.name}`,
+    `Start: ${format(parseISO(event.startDate), "EEEE, MMMM d, yyyy 'at' h:mm a")}`,
+    `End: ${format(parseISO(event.endDate), "EEEE, MMMM d, yyyy 'at' h:mm a")}`,
+    `Color: ${event.color}`,
+  ].join("\n");
+}
+
+function formatGetEventsOutput(output: unknown): string {
+  const typedOutput = output as GetEventsOutput;
+
+  if (typedOutput.count === 0) {
+    return typedOutput.searchFailed && typedOutput.searchQuery ? `No events found matching "${typedOutput.searchQuery}".` : "No events found.";
+  }
+
+  if (typedOutput.count === 1 && typedOutput.events.length === 1 && "picturePath" in typedOutput.events[0].user) {
+    return formatEventDetails(typedOutput.events[0]);
+  }
+
+  const header =
+    typedOutput.searchFailed && typedOutput.searchQuery
+      ? `No events found matching "${typedOutput.searchQuery}". Showing ${typedOutput.count} event(s) from the broader selection instead.`
+      : `Found ${typedOutput.count} event(s):`;
+
+  return [header, ...typedOutput.events.map(formatEventListItem)].join("\n");
+}
+
+function formatCalendarInfoOutput(output: unknown): string {
+  const typedOutput = output as CalendarInfoOutput;
+
+  return [
+    "Calendar Info:",
+    `- Today: ${typedOutput.state.todayFormatted}`,
+    `- Selected Date: ${typedOutput.state.selectedDateFormatted}`,
+    `- User Filter: ${typedOutput.state.userFilter}`,
+    `- Badge Style: ${typedOutput.state.badgeVariant}`,
+    `- Visible Hours: ${typedOutput.state.visibleHours.description}`,
+    `- Total Events: ${typedOutput.state.totalEvents}`,
+    `- Users: ${typedOutput.users.map(user => `${user.name} (${user.id})`).join(", ")}`,
+    `- Colors: ${typedOutput.colors.join(", ")}`,
+  ].join("\n");
+}
+
+function formatMessageOutput(output: unknown): string {
+  return (output as MessageOutput).message;
+}
+
+function useCalendarQueryTools({
+  badgeVariant,
+  events,
+  selectedDate,
+  selectedUserId,
+  users,
+  visibleHours,
+}: Pick<CalendarToolDependencies, "badgeVariant" | "events" | "selectedDate" | "selectedUserId" | "users" | "visibleHours">) {
   useWebMCP({
     name: "get_events",
     description:
-      "Get calendar events. ALWAYS provide a 'month' parameter (e.g., '2025-12') to filter by month. If searching by title and no results found, returns the full month's events so you can see what's available.",
+      "Get calendar events with flexible filtering. Use id for a single event, date:'today' for today's events, month:'YYYY-MM' for a month, or no params for all events. Params compose together.",
+    annotations: READ_ONLY_ANNOTATIONS,
     inputSchema: {
+      id: z.number().int().positive().optional().describe("Get a single event by ID with full details"),
       month: z
         .string()
-        .describe("REQUIRED: Filter events by month in YYYY-MM format (e.g., '2025-12' for December 2025)."),
+        .regex(/^\d{4}-\d{2}$/, "Month must use YYYY-MM format")
+        .optional()
+        .describe("Filter events by month"),
+      date: z.string().optional().describe("Filter by date: 'today' or an ISO 8601 date"),
       userId: z.string().optional().describe("Filter events by user ID. Use 'all' or omit to show all users."),
-      searchQuery: z.string().optional().describe("Search events by title (case-insensitive). If no match found, returns all events for the month."),
+      searchQuery: z.string().optional().describe("Search events by title or description (case-insensitive)"),
     },
-    handler: async ({ month, userId, searchQuery }) => {
+    handler: async ({ id, month, date, userId, searchQuery }) => {
+      if (id !== undefined) {
+        const event = requireEvent(events, id);
+
+        return {
+          count: 1,
+          events: [serializeEvent(event, { includePicture: true })],
+        };
+      }
+
       let filteredEvents = [...events];
-      let searchFailed = false;
-      let originalQuery = searchQuery;
 
-      // Filter by month (YYYY-MM format) - REQUIRED
-      const [year, monthNum] = month.split("-").map(Number);
-      const monthStart = new Date(year, monthNum - 1, 1);
-      const monthEnd = new Date(year, monthNum, 0, 23, 59, 59); // Last day of month
+      if (date) {
+        filteredEvents = filterEventsByRange(filteredEvents, resolveDayRange(date));
+      }
 
-      filteredEvents = filteredEvents.filter(event => {
-        const eventStart = parseISO(event.startDate);
-        const eventEnd = parseISO(event.endDate);
-        return (
-          isWithinInterval(eventStart, { start: monthStart, end: monthEnd }) ||
-          isWithinInterval(eventEnd, { start: monthStart, end: monthEnd }) ||
-          (eventStart <= monthStart && eventEnd >= monthEnd)
-        );
-      });
+      if (month) {
+        filteredEvents = filterEventsByRange(filteredEvents, resolveMonthRange(month));
+      }
 
-      const monthEvents = [...filteredEvents]; // Keep copy of month events
-
-      // Filter by user
       if (userId && userId !== "all") {
         filteredEvents = filteredEvents.filter(event => event.user.id === userId);
       }
 
-      // Filter by search query
+      let searchFailed = false;
       if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const searchResults = filteredEvents.filter(
-          event => event.title.toLowerCase().includes(query) || event.description.toLowerCase().includes(query)
-        );
+        const normalizedQuery = searchQuery.toLowerCase();
+        const matchingEvents = filteredEvents.filter(event => {
+          return event.title.toLowerCase().includes(normalizedQuery) || event.description.toLowerCase().includes(normalizedQuery);
+        });
 
-        // If search returns nothing, fall back to showing the month's events
-        if (searchResults.length === 0) {
+        if (matchingEvents.length === 0) {
           searchFailed = true;
-          filteredEvents = monthEvents; // Reset to month events
         } else {
-          filteredEvents = searchResults;
+          filteredEvents = matchingEvents;
         }
       }
-
-      // Sort by start date
-      filteredEvents.sort((a, b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
 
       return {
         count: filteredEvents.length,
         searchFailed,
-        searchQuery: originalQuery,
-        month: format(monthStart, "MMMM yyyy"),
-        events: filteredEvents.map(event => ({
-          id: event.id,
-          title: event.title,
-          description: event.description,
-          startDate: event.startDate,
-          endDate: event.endDate,
-          startDateFormatted: format(parseISO(event.startDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
-          endDateFormatted: format(parseISO(event.endDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
-          color: event.color,
-          user: {
-            id: event.user.id,
-            name: event.user.name,
-          },
-        })),
+        searchQuery,
+        events: sortEventsChronologically(filteredEvents).map(event => serializeEvent(event)),
       };
     },
-    formatOutput: output => {
-      let header = "";
-      if (output.searchFailed && output.searchQuery) {
-        header = `NOTE: No events found matching "${output.searchQuery}". Showing all ${output.count} events for ${output.month} instead:\n\n`;
-      } else if (output.count === 0) {
-        return `No events found for ${output.month}.`;
-      }
-      return `${header}Found ${output.count} event(s) for ${output.month}:\n${output.events
-        .map(
-          (e: { title: string; startDateFormatted: string; user: { name: string }; id: number }) =>
-            `- [ID: ${e.id}] "${e.title}" (${e.startDateFormatted}) - ${e.user.name}`
-        )
-        .join("\n")}`;
-    },
+    formatOutput: formatGetEventsOutput,
   });
 
-  /**
-   * Tool: get_event_by_id
-   * Retrieves detailed information about a specific event.
-   */
   useWebMCP({
-    name: "get_event_by_id",
-    description: "Get detailed information about a specific event by its ID.",
-    inputSchema: {
-      eventId: z.number().describe("The unique ID of the event to retrieve"),
-    },
-    handler: async ({ eventId }) => {
-      const event = events.find(e => e.id === eventId);
-      if (!event) {
-        throw new Error(`Event with ID ${eventId} not found`);
-      }
-      return {
-        id: event.id,
-        title: event.title,
-        description: event.description,
-        startDate: event.startDate,
-        endDate: event.endDate,
-        startDateFormatted: format(parseISO(event.startDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
-        endDateFormatted: format(parseISO(event.endDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
-        color: event.color,
-        user: {
-          id: event.user.id,
-          name: event.user.name,
-          picturePath: event.user.picturePath,
-        },
-      };
-    },
-    formatOutput: output =>
-      `Event: "${output.title}"\nAssigned to: ${output.user.name}\nStart: ${output.startDateFormatted}\nEnd: ${output.endDateFormatted}\nColor: ${output.color}\nDescription: ${output.description}`,
-  });
-
-  // ╔════════════════════════════════════════════════════════════════════════════╗
-  // ║                           WRITE OPERATIONS                                 ║
-  // ╚════════════════════════════════════════════════════════════════════════════╝
-
-  /**
-   * Tool: create_event
-   * Creates a new calendar event. Instructs the agent to get calendar state first
-   * to know today's date, and to navigate to the event after creation.
-   */
-  useWebMCP({
-    name: "create_event",
-    description:
-      "Create a new calendar event. IMPORTANT: First call get_calendar_state to know today's date, then use that to create events relative to today (e.g., 'tomorrow' = today + 1 day). After creating, ALWAYS use navigate_to_event with the returned event ID to show the user their new event.",
-    inputSchema: {
-      title: z.string().min(1).describe("The title of the event (required)"),
-      description: z.string().min(1).describe("A description of the event (required)"),
-      startDate: z.string().describe("Start date in ISO 8601 format (e.g., '2025-12-09T14:00:00'). Use get_calendar_state first to know today's date."),
-      endDate: z.string().describe("End date in ISO 8601 format (e.g., '2025-12-09T15:00:00')"),
-      userId: z.string().describe("The ID of the user to assign the event to. Use get_users to see available users."),
-      color: z
-        .enum(["blue", "green", "red", "yellow", "purple", "orange", "gray"])
-        .describe("The color of the event badge"),
-    },
-    handler: async ({ title, description, startDate, endDate, userId, color }) => {
-      const user = users.find(u => u.id === userId);
-      if (!user) {
-        throw new Error(`User with ID ${userId} not found. Use get_users to see available users.`);
-      }
-
-      const parsedStart = parseISO(startDate);
-      const parsedEnd = parseISO(endDate);
-
-      if (parsedStart >= parsedEnd) {
-        throw new Error("Start date must be before end date");
-      }
-
-      // Generate a new unique ID
-      const maxId = events.reduce((max, event) => Math.max(max, event.id), 0);
-      const newId = maxId + 1;
-
-      const newEvent: IEvent = {
-        id: newId,
-        title,
-        description,
-        startDate: parsedStart.toISOString(),
-        endDate: parsedEnd.toISOString(),
-        color,
-        user,
-      };
-
-      setLocalEvents(prev => [...prev, newEvent]);
-
-      return {
-        success: true,
-        message: `Event "${title}" created successfully`,
-        event: {
-          id: newEvent.id,
-          title: newEvent.title,
-          startDateFormatted: format(parsedStart, "EEEE, MMMM d, yyyy 'at' h:mm a"),
-          endDateFormatted: format(parsedEnd, "EEEE, MMMM d, yyyy 'at' h:mm a"),
-          assignedTo: user.name,
-          color,
-        },
-      };
-    },
-    formatOutput: output =>
-      `${output.message}\n\n**Event ID: ${output.event.id}** (use this ID with navigate_to_event to show the event)\n\nAssigned to: ${output.event.assignedTo}\nStart: ${output.event.startDateFormatted}\nEnd: ${output.event.endDateFormatted}`,
-  });
-
-  /**
-   * Tool: update_event
-   * Updates an existing calendar event with new values.
-   */
-  useWebMCP({
-    name: "update_event",
-    description:
-      "Update an existing calendar event. You can update any combination of fields: title, description, dates, user, or color. IMPORTANT: After updating an event, ALWAYS use navigate_to_event with the event ID to show the user their updated event in the month view.",
-    inputSchema: {
-      eventId: z.number().describe("The ID of the event to update"),
-      title: z.string().optional().describe("New title for the event"),
-      description: z.string().optional().describe("New description for the event"),
-      startDate: z.string().optional().describe("New start date in ISO 8601 format"),
-      endDate: z.string().optional().describe("New end date in ISO 8601 format"),
-      userId: z.string().optional().describe("New user ID to assign the event to"),
-      color: z.enum(["blue", "green", "red", "yellow", "purple", "orange", "gray"]).optional().describe("New color"),
-    },
-    handler: async ({ eventId, title, description, startDate, endDate, userId, color }) => {
-      const eventIndex = events.findIndex(e => e.id === eventId);
-      if (eventIndex === -1) {
-        throw new Error(`Event with ID ${eventId} not found`);
-      }
-
-      const existingEvent = events[eventIndex];
-      let updatedUser = existingEvent.user;
-
-      if (userId) {
-        const user = users.find(u => u.id === userId);
-        if (!user) {
-          throw new Error(`User with ID ${userId} not found`);
-        }
-        updatedUser = user;
-      }
-
-      const newStartDate = startDate ? parseISO(startDate).toISOString() : existingEvent.startDate;
-      const newEndDate = endDate ? parseISO(endDate).toISOString() : existingEvent.endDate;
-
-      if (parseISO(newStartDate) >= parseISO(newEndDate)) {
-        throw new Error("Start date must be before end date");
-      }
-
-      const updatedEvent: IEvent = {
-        ...existingEvent,
-        title: title ?? existingEvent.title,
-        description: description ?? existingEvent.description,
-        startDate: newStartDate,
-        endDate: newEndDate,
-        color: color ?? existingEvent.color,
-        user: updatedUser,
-      };
-
-      setLocalEvents(prev => {
-        const newEvents = [...prev];
-        newEvents[eventIndex] = updatedEvent;
-        return newEvents;
-      });
-
-      return {
-        success: true,
-        message: `Event "${updatedEvent.title}" (ID: ${eventId}) updated successfully`,
-        event: {
-          id: updatedEvent.id,
-          title: updatedEvent.title,
-          startDateFormatted: format(parseISO(updatedEvent.startDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
-          endDateFormatted: format(parseISO(updatedEvent.endDate), "EEEE, MMMM d, yyyy 'at' h:mm a"),
-          assignedTo: updatedUser.name,
-          color: updatedEvent.color,
-        },
-      };
-    },
-    formatOutput: output =>
-      `${output.message}\n\n**Event ID: ${output.event.id}** (use this ID with navigate_to_event to show the event)\n\nAssigned to: ${output.event.assignedTo}\nStart: ${output.event.startDateFormatted}\nEnd: ${output.event.endDateFormatted}`,
-  });
-
-  /**
-   * Tool: delete_event
-   * Permanently removes a calendar event.
-   */
-  useWebMCP({
-    name: "delete_event",
-    description: "Delete a calendar event by its ID. This action cannot be undone.",
-    inputSchema: {
-      eventId: z.number().describe("The ID of the event to delete"),
-    },
-    handler: async ({ eventId }) => {
-      const event = events.find(e => e.id === eventId);
-      if (!event) {
-        throw new Error(`Event with ID ${eventId} not found`);
-      }
-
-      setLocalEvents(prev => prev.filter(e => e.id !== eventId));
-
-      return {
-        success: true,
-        message: `Event "${event.title}" (ID: ${eventId}) deleted successfully`,
-        deletedEvent: {
-          id: event.id,
-          title: event.title,
-        },
-      };
-    },
-    formatOutput: output => output.message,
-  });
-
-  // ╔════════════════════════════════════════════════════════════════════════════╗
-  // ║                           USER & STATE QUERIES                             ║
-  // ╚════════════════════════════════════════════════════════════════════════════╝
-
-  /**
-   * Tool: get_users
-   * Lists all users who can be assigned to events.
-   */
-  useWebMCP({
-    name: "get_users",
-    description:
-      "Get a list of all users who can be assigned to calendar events. Returns user IDs and names for use in create_event and update_event.",
-    inputSchema: {},
-    handler: async () => {
-      return {
-        count: users.length,
-        users: users.map(user => ({
-          id: user.id,
-          name: user.name,
-          hasPicture: !!user.picturePath,
-        })),
-      };
-    },
-    formatOutput: output =>
-      `${output.count} user(s) available:\n${output.users
-        .map((u: { id: string; name: string }) => `- ${u.name} (ID: ${u.id})`)
-        .join("\n")}`,
-  });
-
-  /**
-   * Tool: get_calendar_state
-   * Returns current calendar state including today's date, selected date, and settings.
-   * Agents should call this first to understand the current context.
-   */
-  useWebMCP({
-    name: "get_calendar_state",
-    description:
-      "Get the current state of the calendar including TODAY'S DATE, selected date, user filter, and display settings. IMPORTANT: Always call this first to know what today's date is before creating events.",
+    name: "get_calendar_info",
+    description: "Get all calendar metadata in one call: users, calendar state (today's date, selected date, filters, settings), and available event colors.",
+    annotations: READ_ONLY_ANNOTATIONS,
     inputSchema: {},
     handler: async () => {
       const now = new Date();
-      const selectedUser = selectedUserId === "all" ? null : users.find(u => u.id === selectedUserId);
+      const selectedUser = selectedUserId === "all" ? null : users.find(user => user.id === selectedUserId);
+
       return {
-        today: now.toISOString(),
-        todayFormatted: format(now, "EEEE, MMMM d, yyyy"),
-        currentMonth: format(now, "MMMM yyyy"),
-        selectedDate: selectedDate.toISOString(),
-        selectedDateFormatted: format(selectedDate, "EEEE, MMMM d, yyyy"),
-        userFilter: selectedUserId === "all" ? "all" : selectedUser?.name ?? selectedUserId,
-        userFilterId: selectedUserId,
-        badgeVariant,
-        visibleHours: {
-          from: visibleHours.from,
-          to: visibleHours.to,
-          description: `${visibleHours.from}:00 - ${visibleHours.to}:00`,
+        users: users.map(user => ({ id: user.id, name: user.name, hasPicture: Boolean(user.picturePath) })),
+        state: {
+          today: now.toISOString(),
+          todayFormatted: format(now, "EEEE, MMMM d, yyyy"),
+          selectedDate: selectedDate.toISOString(),
+          selectedDateFormatted: format(selectedDate, "EEEE, MMMM d, yyyy"),
+          userFilterId: selectedUserId,
+          userFilter: selectedUserId === "all" ? "all" : (selectedUser?.name ?? selectedUserId),
+          badgeVariant,
+          visibleHours: {
+            from: visibleHours.from,
+            to: visibleHours.to,
+            description: formatVisibleHours(visibleHours),
+          },
+          totalEvents: events.length,
         },
-        totalEvents: events.length,
-      };
-    },
-    formatOutput: output =>
-      `Calendar State:\n- Today's Date: ${output.todayFormatted}\n- Current Month: ${output.currentMonth}\n- Selected Date: ${output.selectedDateFormatted}\n- User Filter: ${output.userFilter}\n- Badge Style: ${output.badgeVariant}\n- Visible Hours: ${output.visibleHours.description}\n- Total Events: ${output.totalEvents}`,
-  });
-
-  // ╔════════════════════════════════════════════════════════════════════════════╗
-  // ║                           NAVIGATION TOOLS                                 ║
-  // ╚════════════════════════════════════════════════════════════════════════════╝
-
-  /**
-   * Tool: navigate_to_date
-   * Changes the calendar's selected date to show a specific day/week/month.
-   */
-  useWebMCP({
-    name: "navigate_to_date",
-    description:
-      "Navigate the calendar to a specific date. This changes which day/week/month is displayed based on the current view.",
-    inputSchema: {
-      date: z.string().describe("The date to navigate to in ISO 8601 format (e.g., '2025-01-15')"),
-    },
-    handler: async ({ date }) => {
-      const parsedDate = parseISO(date);
-      setSelectedDate(parsedDate);
-
-      return {
-        success: true,
-        message: `Calendar navigated to ${format(parsedDate, "EEEE, MMMM d, yyyy")}`,
-        date: parsedDate.toISOString(),
-        dateFormatted: format(parsedDate, "EEEE, MMMM d, yyyy"),
-      };
-    },
-    formatOutput: output => output.message,
-  });
-
-  /**
-   * Tool: navigate_to_today
-   * Quickly jumps the calendar to today's date.
-   */
-  useWebMCP({
-    name: "navigate_to_today",
-    description: "Navigate the calendar to today's date.",
-    inputSchema: {},
-    handler: async () => {
-      const today = new Date();
-      setSelectedDate(today);
-
-      return {
-        success: true,
-        message: `Calendar navigated to today (${format(today, "EEEE, MMMM d, yyyy")})`,
-        date: today.toISOString(),
-        dateFormatted: format(today, "EEEE, MMMM d, yyyy"),
-      };
-    },
-    formatOutput: output => output.message,
-  });
-
-  // ╔════════════════════════════════════════════════════════════════════════════╗
-  // ║                           SETTINGS & DISPLAY                               ║
-  // ╚════════════════════════════════════════════════════════════════════════════╝
-
-  /**
-   * Tool: set_user_filter
-   * Filters the calendar to show only events for a specific user.
-   */
-  useWebMCP({
-    name: "set_user_filter",
-    description:
-      "Filter the calendar to show events for a specific user, or show all users. This affects all calendar views.",
-    inputSchema: {
-      userId: z.string().describe("The user ID to filter by, or 'all' to show all users' events"),
-    },
-    handler: async ({ userId }) => {
-      if (userId === "all") {
-        setSelectedUserId("all");
-        return {
-          success: true,
-          message: "Calendar is now showing events for all users",
-          filter: "all",
-        };
-      }
-
-      const user = users.find(u => u.id === userId);
-      if (!user) {
-        throw new Error(`User with ID ${userId} not found. Use get_users to see available users.`);
-      }
-
-      setSelectedUserId(userId);
-      return {
-        success: true,
-        message: `Calendar is now showing events for ${user.name}`,
-        filter: user.name,
-        userId: user.id,
-      };
-    },
-    formatOutput: output => output.message,
-  });
-
-  /**
-   * Tool: set_badge_variant
-   * Changes how event badges appear in the calendar views.
-   */
-  useWebMCP({
-    name: "set_badge_variant",
-    description:
-      "Change how event badges are displayed in the calendar. Options: 'dot' (simple dots), 'colored' (colored badges with text), or 'mixed' (combination).",
-    inputSchema: {
-      variant: z
-        .enum(["dot", "colored", "mixed"])
-        .describe("The badge display variant: 'dot', 'colored', or 'mixed'"),
-    },
-    handler: async ({ variant }) => {
-      setBadgeVariant(variant);
-      return {
-        success: true,
-        message: `Badge display changed to "${variant}"`,
-        variant,
-      };
-    },
-    formatOutput: output => output.message,
-  });
-
-  /**
-   * Tool: set_visible_hours
-   * Adjusts the time range shown in week and day views.
-   */
-  useWebMCP({
-    name: "set_visible_hours",
-    description:
-      "Set the visible hour range for the week and day views. Hours outside this range will be hidden to focus on the relevant time period.",
-    inputSchema: {
-      from: z.number().min(0).max(23).describe("Start hour (0-23, e.g., 8 for 8:00 AM)"),
-      to: z.number().min(1).max(24).describe("End hour (1-24, e.g., 18 for 6:00 PM)"),
-    },
-    handler: async ({ from, to }) => {
-      if (from >= to) {
-        throw new Error("Start hour must be before end hour");
-      }
-      setVisibleHours({ from, to });
-      return {
-        success: true,
-        message: `Visible hours set to ${from}:00 - ${to}:00`,
-        from,
-        to,
-      };
-    },
-    formatOutput: output => output.message,
-  });
-
-  /**
-   * Tool: get_todays_events
-   * Quick access to today's schedule, sorted by time.
-   */
-  useWebMCP({
-    name: "get_todays_events",
-    description: "Get all events happening today, sorted by start time.",
-    inputSchema: {},
-    handler: async () => {
-      const today = new Date();
-      const todayStart = startOfDay(today);
-      const todayEnd = endOfDay(today);
-
-      const todaysEvents = events.filter(event => {
-        const eventStart = parseISO(event.startDate);
-        const eventEnd = parseISO(event.endDate);
-        return (
-          isWithinInterval(eventStart, { start: todayStart, end: todayEnd }) ||
-          isWithinInterval(eventEnd, { start: todayStart, end: todayEnd }) ||
-          (eventStart <= todayStart && eventEnd >= todayEnd)
-        );
-      });
-
-      todaysEvents.sort((a, b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
-
-      return {
-        date: format(today, "EEEE, MMMM d, yyyy"),
-        count: todaysEvents.length,
-        events: todaysEvents.map(event => ({
-          id: event.id,
-          title: event.title,
-          startTime: format(parseISO(event.startDate), "h:mm a"),
-          endTime: format(parseISO(event.endDate), "h:mm a"),
-          user: event.user.name,
-          color: event.color,
-        })),
-      };
-    },
-    formatOutput: output => {
-      if (output.count === 0) return `No events scheduled for today (${output.date}).`;
-      return `Events for today (${output.date}):\n${output.events
-        .map(
-          (e: { title: string; startTime: string; endTime: string; user: string }) =>
-            `- ${e.startTime} - ${e.endTime}: "${e.title}" (${e.user})`
-        )
-        .join("\n")}`;
-    },
-  });
-
-  /**
-   * Tool: get_event_colors
-   * Lists available event color options.
-   */
-  useWebMCP({
-    name: "get_event_colors",
-    description: "Get the list of available colors for calendar events.",
-    inputSchema: {},
-    handler: async () => {
-      return {
         colors: EVENT_COLORS,
-        description: "These colors can be used when creating or updating events.",
       };
     },
-    formatOutput: output => `Available event colors: ${output.colors.join(", ")}`,
+    formatOutput: formatCalendarInfoOutput,
+  });
+}
+
+function useCalendarMutationTools({
+  events,
+  navigateToDateInView,
+  openAddDialog,
+  openDeleteDialog,
+  openEditDialog,
+  users,
+}: Pick<CalendarToolDependencies, "events" | "navigateToDateInView" | "openAddDialog" | "openDeleteDialog" | "openEditDialog" | "users">) {
+  useWebMCP({
+    name: "create_event",
+    description:
+      "Create a new calendar event by opening the Add Event dialog pre-filled with data. The dialog shows a countdown before auto-submitting. The user can cancel or edit before submission. Call get_calendar_info first to know today's date and get valid user IDs.",
+    annotations: MUTATING_ANNOTATIONS,
+    inputSchema: {
+      title: z.string().min(1).describe("The title of the event"),
+      description: z.string().min(1).describe("A description of the event"),
+      startDate: z.string().describe("Start date/time in ISO 8601 format"),
+      endDate: z.string().describe("End date/time in ISO 8601 format"),
+      userId: z.string().describe("The ID of the user to assign the event to"),
+      color: z.enum(EVENT_COLORS).describe("The color of the event badge"),
+    },
+    handler: async ({ title, description, startDate, endDate, userId, color }) => {
+      const requestedUser = requireUser(users, userId);
+      const requestedStartDate = parseRequiredIsoDate(startDate, "startDate");
+      const requestedEndDate = parseRequiredIsoDate(endDate, "endDate");
+
+      if (requestedStartDate >= requestedEndDate) {
+        throw new Error("Start date must be before end date");
+      }
+
+      const result = await openAddDialog(
+        {
+          title,
+          description,
+          startDate: requestedStartDate,
+          startTime: { hour: requestedStartDate.getHours(), minute: requestedStartDate.getMinutes() },
+          endDate: requestedEndDate,
+          endTime: { hour: requestedEndDate.getHours(), minute: requestedEndDate.getMinutes() },
+          userId,
+          color,
+        },
+        { source: "ai" }
+      );
+
+      if (result.cancelled || !result.event) {
+        return { success: false, message: "Event creation was cancelled by the user." };
+      }
+
+      navigateToDateInView(parseISO(result.event.startDate), "month");
+
+      return {
+        success: true,
+        message: formatMutationResult(result.event, "created"),
+        event: result.event,
+        requestedUser: requestedUser.name,
+      };
+    },
+    formatOutput: formatMessageOutput,
   });
 
-  /**
-   * Tool: navigate_to_event
-   * Navigates to show a specific event in the calendar.
-   * Should be called after create_event or update_event to show the result.
-   */
   useWebMCP({
-    name: "navigate_to_event",
+    name: "update_event",
     description:
-      "Navigate the calendar to show a specific event by its ID. This navigates to the month view by default (best for seeing events in context). Optionally use view='day' to see the event in detail with time slots. Use this after creating or updating an event to show it to the user.",
+      "Update an existing calendar event by opening the Edit dialog pre-filled. The dialog shows a countdown before auto-submitting. Only include fields you want to change.",
+    annotations: CONFIGURATION_ANNOTATIONS,
     inputSchema: {
-      eventId: z.number().describe("The ID of the event to navigate to"),
-      view: z
-        .enum(["month", "day"])
-        .optional()
-        .describe("The calendar view to navigate to. Defaults to 'month' (recommended). Use 'day' only when detailed time view is needed."),
+      eventId: z.number().int().positive().describe("The ID of the event to update"),
+      title: z.string().optional().describe("New title for the event"),
+      description: z.string().optional().describe("New description for the event"),
+      startDate: z.string().optional().describe("New start date/time in ISO 8601 format"),
+      endDate: z.string().optional().describe("New end date/time in ISO 8601 format"),
+      userId: z.string().optional().describe("New user ID to reassign the event to"),
+      color: z.enum(EVENT_COLORS).optional().describe("New color for the event badge"),
     },
-    handler: async ({ eventId, view = "month" }) => {
-      const event = events.find(e => e.id === eventId);
-      if (!event) {
-        throw new Error(`Event with ID ${eventId} not found`);
+    handler: async ({ eventId, title, description, startDate, endDate, userId, color }) => {
+      const existingEvent = requireEvent(events, eventId);
+      const updatedUser = userId ? requireUser(users, userId) : existingEvent.user;
+      const updatedStartDate = startDate ? parseRequiredIsoDate(startDate, "startDate") : parseISO(existingEvent.startDate);
+      const updatedEndDate = endDate ? parseRequiredIsoDate(endDate, "endDate") : parseISO(existingEvent.endDate);
+
+      if (updatedStartDate >= updatedEndDate) {
+        throw new Error("Start date must be before end date");
       }
 
-      const eventDate = parseISO(event.startDate);
-      setSelectedDate(eventDate);
+      const result = await openEditDialog(
+        {
+          ...existingEvent,
+          title: title ?? existingEvent.title,
+          description: description ?? existingEvent.description,
+          startDate: updatedStartDate.toISOString(),
+          endDate: updatedEndDate.toISOString(),
+          color: color ?? existingEvent.color,
+          user: updatedUser,
+        },
+        { source: "ai" }
+      );
 
-      // Navigate to the appropriate view
-      const targetView = view === "day" ? "/day-view" : "/month-view";
-      if (pathname !== targetView) {
-        router.push(targetView);
+      if (result.cancelled || !result.event) {
+        return { success: false, message: "Event update was cancelled by the user." };
       }
 
-      // If navigating to day view, scroll to the event time after a short delay
-      if (view === "day") {
-        setTimeout(() => {
-          const eventHour = eventDate.getHours();
-          const hourElement = document.querySelector(`[data-hour="${eventHour}"]`);
-          if (hourElement) {
-            hourElement.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-        }, 100);
+      navigateToDateInView(parseISO(result.event.startDate), "month");
+
+      return {
+        success: true,
+        message: formatMutationResult(result.event, "updated"),
+        event: result.event,
+      };
+    },
+    formatOutput: formatMessageOutput,
+  });
+
+  useWebMCP({
+    name: "delete_event",
+    description:
+      "Delete a calendar event by opening a confirmation dialog. The dialog shows a countdown before auto-confirming. The user can cancel during the countdown.",
+    annotations: DESTRUCTIVE_ANNOTATIONS,
+    inputSchema: {
+      eventId: z.number().int().positive().describe("The ID of the event to delete"),
+    },
+    handler: async ({ eventId }) => {
+      const event = requireEvent(events, eventId);
+      const result = await openDeleteDialog(event, { source: "ai" });
+
+      if (result.cancelled) {
+        return { success: false, message: "Event deletion was cancelled by the user." };
       }
 
       return {
         success: true,
-        message: `Calendar navigated to "${event.title}" on ${format(eventDate, "EEEE, MMMM d, yyyy")} in ${view} view`,
-        event: {
-          id: event.id,
-          title: event.title,
-          date: eventDate.toISOString(),
-          dateFormatted: format(eventDate, "EEEE, MMMM d, yyyy"),
-          time: format(eventDate, "h:mm a"),
-        },
-        view,
+        message: `Event "${event.title}" (ID: ${event.id}) has been permanently deleted`,
       };
     },
-    formatOutput: output => output.message,
+    formatOutput: formatMessageOutput,
+  });
+}
+
+function useCalendarUiTools({
+  badgeVariant,
+  events,
+  navigateToDateInView,
+  setBadgeVariant,
+  setSelectedUserId,
+  setVisibleHours,
+  users,
+  visibleHours,
+}: Pick<
+  CalendarToolDependencies,
+  "badgeVariant" | "events" | "navigateToDateInView" | "setBadgeVariant" | "setSelectedUserId" | "setVisibleHours" | "users" | "visibleHours"
+>) {
+  useWebMCP({
+    name: "navigate",
+    description:
+      "Navigate the calendar UI. No params goes to today, date goes to a specific day, and eventId jumps to an event. Choose month or day view with view.",
+    annotations: CONFIGURATION_ANNOTATIONS,
+    inputSchema: {
+      date: z.string().optional().describe("The date to navigate to in ISO 8601 format"),
+      eventId: z.number().int().positive().optional().describe("Navigate to the date of this event"),
+      view: z.enum(CALENDAR_VIEWS).optional().describe("Calendar view to use. Default is 'month'."),
+    },
+    handler: async ({ date, eventId, view = "month" }) => {
+      if (date && eventId !== undefined) {
+        throw new Error("Provide either date or eventId, not both");
+      }
+
+      let targetDate = new Date();
+      let message = `Calendar navigated to ${format(targetDate, "EEEE, MMMM d, yyyy")} in ${view} view`;
+
+      if (eventId !== undefined) {
+        const event = requireEvent(events, eventId);
+        targetDate = parseISO(event.startDate);
+        message = `Calendar navigated to "${event.title}" on ${format(targetDate, "EEEE, MMMM d, yyyy")} in ${view} view`;
+      } else if (date) {
+        targetDate = parseRequiredIsoDate(date, "date");
+        message = `Calendar navigated to ${format(targetDate, "EEEE, MMMM d, yyyy")} in ${view} view`;
+      }
+
+      navigateToDateInView(targetDate, view);
+
+      return {
+        success: true,
+        message,
+      };
+    },
+    formatOutput: formatMessageOutput,
   });
 
-  // ╔════════════════════════════════════════════════════════════════════════════╗
-  // ║                           EXAMPLE PROMPTS                                  ║
-  // ╚════════════════════════════════════════════════════════════════════════════╝
+  useWebMCP({
+    name: "configure",
+    description: "Change calendar display settings. Include only the settings you want to change: userFilter, badgeVariant, visibleHoursFrom, visibleHoursTo.",
+    annotations: CONFIGURATION_ANNOTATIONS,
+    inputSchema: {
+      userFilter: z.string().optional().describe("User ID to filter by, or 'all' to show all users"),
+      badgeVariant: z.enum(BADGE_VARIANTS).optional().describe("Badge display variant"),
+      visibleHoursFrom: z.number().min(0).max(23).optional().describe("Start of visible hours"),
+      visibleHoursTo: z.number().min(1).max(24).optional().describe("End of visible hours"),
+    },
+    handler: async ({ userFilter, badgeVariant: requestedBadgeVariant, visibleHoursFrom, visibleHoursTo }) => {
+      const changes: string[] = [];
 
-  /**
-   * Prompt: reschedule_event
-   * Demonstrates finding an event and moving it to a new time.
-   */
+      if (userFilter !== undefined) {
+        if (userFilter === "all") {
+          setSelectedUserId("all");
+          changes.push("User filter: all");
+        } else {
+          const user = requireUser(users, userFilter);
+          setSelectedUserId(user.id);
+          changes.push(`User filter: ${user.name}`);
+        }
+      }
+
+      if (requestedBadgeVariant !== undefined && requestedBadgeVariant !== badgeVariant) {
+        setBadgeVariant(requestedBadgeVariant);
+        changes.push(`Badge variant: ${requestedBadgeVariant}`);
+      }
+
+      if (visibleHoursFrom !== undefined || visibleHoursTo !== undefined) {
+        const nextVisibleHours = {
+          from: visibleHoursFrom ?? visibleHours.from,
+          to: visibleHoursTo ?? visibleHours.to,
+        };
+
+        if (nextVisibleHours.from >= nextVisibleHours.to) {
+          throw new Error("Start hour must be before end hour");
+        }
+
+        setVisibleHours(nextVisibleHours);
+        changes.push(`Visible hours: ${formatVisibleHours(nextVisibleHours)}`);
+      }
+
+      return {
+        success: true,
+        message: changes.length === 0 ? "No settings changed." : `Settings updated:\n${changes.map(change => `- ${change}`).join("\n")}`,
+      };
+    },
+    formatOutput: formatMessageOutput,
+  });
+}
+
+function useCalendarPrompts() {
   useWebMCPPrompt({
     name: "reschedule_event",
     description: "Move an event to a different day",
@@ -701,17 +564,13 @@ export function CalendarWebMCPTools() {
           role: "user" as const,
           content: {
             type: "text" as const,
-            text: "Find the 'Team stand-up' event that's currently scheduled and move it to next Thursday at 10am. First briefly explain what you're doing, then use the tools to find the event, update it, and navigate to show me the change."
+            text: "Find the 'Team stand-up' event that's currently scheduled and move it to next Thursday at 10am. First briefly explain what you're doing, then use the tools to find the event, update it, and navigate to show me the change.",
           },
         },
       ],
     }),
   });
 
-  /**
-   * Prompt: create_meeting
-   * Demonstrates creating a new event with proper date awareness.
-   */
   useWebMCPPrompt({
     name: "create_meeting",
     description: "Schedule a new meeting",
@@ -721,17 +580,13 @@ export function CalendarWebMCPTools() {
           role: "user" as const,
           content: {
             type: "text" as const,
-            text: "Create a new 1-hour meeting called 'Project Review' with Leonardo Ramos for tomorrow at 2pm. Use a blue color. First call get_calendar_state to get today's date, briefly explain what you're doing, then get_users for the user ID, create the event for tomorrow, and navigate to show me the new meeting on the calendar."
+            text: "Create a new 1-hour meeting called 'Project Review' with Leonardo Ramos for tomorrow at 2pm. Use a blue color. First call get_calendar_info to get today's date and user IDs, briefly explain what you're doing, then create the event and navigate to show me the new meeting on the calendar.",
           },
         },
       ],
     }),
   });
 
-  /**
-   * Prompt: show_this_week
-   * Demonstrates querying and summarizing events for the current week.
-   */
   useWebMCPPrompt({
     name: "show_this_week",
     description: "Show this week's events",
@@ -741,12 +596,69 @@ export function CalendarWebMCPTools() {
           role: "user" as const,
           content: {
             type: "text" as const,
-            text: "Show me all the events happening this week. First call get_calendar_state to know today's date and current month, briefly explain what you're doing, then use get_events with the current month filter, and give me a nice summary of this week's schedule. Also navigate the calendar to today."
+            text: "Show me all the events happening this week. First call get_calendar_info to know today's date and current month, briefly explain what you're doing, then use get_events with the current month filter, and give me a nice summary of this week's schedule. Also navigate the calendar to today.",
           },
         },
       ],
     }),
   });
+}
+
+export function CalendarWebMCPTools() {
+  const { badgeVariant, events, selectedDate, selectedUserId, setBadgeVariant, setSelectedDate, setSelectedUserId, setVisibleHours, users, visibleHours } =
+    useCalendar();
+  const { openAddDialog, openDeleteDialog, openEditDialog } = useEventDialog();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const navigateToDateInView = useCallback(
+    (date: Date, view: CalendarView = "month") => {
+      setSelectedDate(date);
+
+      const targetPath = view === "day" ? "/day-view" : "/month-view";
+      if (pathname !== targetPath) {
+        router.push(targetPath);
+      }
+
+      if (view === "day") {
+        window.setTimeout(() => {
+          const hourElement = document.querySelector(`[data-hour="${date.getHours()}"]`);
+          if (hourElement instanceof HTMLElement) {
+            hourElement.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 100);
+      }
+    },
+    [pathname, router, setSelectedDate]
+  );
+
+  useCalendarQueryTools({
+    badgeVariant,
+    events,
+    selectedDate,
+    selectedUserId,
+    users,
+    visibleHours,
+  });
+  useCalendarMutationTools({
+    events,
+    navigateToDateInView,
+    openAddDialog,
+    openDeleteDialog,
+    openEditDialog,
+    users,
+  });
+  useCalendarUiTools({
+    badgeVariant,
+    events,
+    navigateToDateInView,
+    setBadgeVariant,
+    setSelectedUserId,
+    setVisibleHours,
+    users,
+    visibleHours,
+  });
+  useCalendarPrompts();
 
   return null;
 }

@@ -1,6 +1,10 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+
+import { db } from "@/calendar/db";
+import { seedIfEmpty } from "@/calendar/db-seed";
 
 import type { Dispatch, SetStateAction } from "react";
 import type { IEvent, IUser } from "@/calendar/interfaces";
@@ -19,10 +23,13 @@ interface ICalendarContext {
   visibleHours: TVisibleHours;
   setVisibleHours: Dispatch<SetStateAction<TVisibleHours>>;
   events: IEvent[];
-  setLocalEvents: Dispatch<SetStateAction<IEvent[]>>;
+  addEvent: (event: Omit<IEvent, "id">) => Promise<number>;
+  updateEvent: (event: IEvent) => Promise<void>;
+  deleteEvent: (id: number) => Promise<void>;
+  isLoading: boolean;
 }
 
-const CalendarContext = createContext({} as ICalendarContext);
+const CalendarContext = createContext<ICalendarContext | null>(null);
 
 const WORKING_HOURS = {
   0: { from: 0, to: 0 },
@@ -36,7 +43,7 @@ const WORKING_HOURS = {
 
 const VISIBLE_HOURS = { from: 7, to: 18 };
 
-export function CalendarProvider({ children, users, events }: { children: React.ReactNode; users: IUser[]; events: IEvent[] }) {
+export function CalendarProvider({ children }: { children: React.ReactNode }) {
   const [badgeVariant, setBadgeVariant] = useState<TBadgeVariant>("colored");
   const [visibleHours, setVisibleHours] = useState<TVisibleHours>(VISIBLE_HOURS);
   const [workingHours, setWorkingHours] = useState<TWorkingHours>(WORKING_HOURS);
@@ -44,36 +51,71 @@ export function CalendarProvider({ children, users, events }: { children: React.
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedUserId, setSelectedUserId] = useState<IUser["id"] | "all">("all");
 
-  // This localEvents doesn't need to exists in a real scenario.
-  // It's used here just to simulate the update of the events.
-  // In a real scenario, the events would be updated in the backend
-  // and the request that fetches the events should be refetched
-  const [localEvents, setLocalEvents] = useState<IEvent[]>(events);
+  useEffect(() => {
+    void seedIfEmpty();
+  }, []);
 
-  const handleSelectDate = (date: Date | undefined) => {
+  const liveEvents = useLiveQuery(() => db.events.toArray());
+  const liveUsers = useLiveQuery(() => db.users.toArray());
+
+  const events = liveEvents ?? [];
+  const users = liveUsers ?? [];
+  const isLoading = liveEvents === undefined || liveUsers === undefined;
+
+  const addEvent = useCallback(async (event: Omit<IEvent, "id">): Promise<number> => {
+    return db.events.add(event as IEvent);
+  }, []);
+
+  const updateEvent = useCallback(async (event: IEvent): Promise<void> => {
+    await db.events.put(event);
+  }, []);
+
+  const deleteEvent = useCallback(async (id: number): Promise<void> => {
+    await db.events.delete(id);
+  }, []);
+
+  const handleSelectDate = useCallback((date: Date | undefined) => {
     if (!date) return;
     setSelectedDate(date);
-  };
+  }, []);
+
+  const value = useMemo<ICalendarContext>(
+    () => ({
+      selectedDate,
+      setSelectedDate: handleSelectDate,
+      selectedUserId,
+      setSelectedUserId,
+      badgeVariant,
+      setBadgeVariant,
+      users,
+      visibleHours,
+      setVisibleHours,
+      workingHours,
+      setWorkingHours,
+      events,
+      addEvent,
+      updateEvent,
+      deleteEvent,
+      isLoading,
+    }),
+    [
+      selectedDate,
+      handleSelectDate,
+      selectedUserId,
+      badgeVariant,
+      users,
+      visibleHours,
+      workingHours,
+      events,
+      addEvent,
+      updateEvent,
+      deleteEvent,
+      isLoading,
+    ]
+  );
 
   return (
-    <CalendarContext.Provider
-      value={{
-        selectedDate,
-        setSelectedDate: handleSelectDate,
-        selectedUserId,
-        setSelectedUserId,
-        badgeVariant,
-        setBadgeVariant,
-        users,
-        visibleHours,
-        setVisibleHours,
-        workingHours,
-        setWorkingHours,
-        // If you go to the refetch approach, you can remove the localEvents and pass the events directly
-        events: localEvents,
-        setLocalEvents,
-      }}
-    >
+    <CalendarContext.Provider value={value}>
       {children}
     </CalendarContext.Provider>
   );
@@ -81,6 +123,9 @@ export function CalendarProvider({ children, users, events }: { children: React.
 
 export function useCalendar(): ICalendarContext {
   const context = useContext(CalendarContext);
-  if (!context) throw new Error("useCalendar must be used within a CalendarProvider.");
+  if (!context) {
+    throw new Error("useCalendar must be used within a CalendarProvider.");
+  }
+
   return context;
 }

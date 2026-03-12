@@ -12,6 +12,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+const DOCS_LINKS = {
+  architecture: "https://docs.mcp-b.ai/explanation/architecture/runtime-layering",
+  bestPractices: "https://docs.mcp-b.ai/explanation/design/tool-design",
+  concepts: "https://docs.mcp-b.ai/explanation/what-is-webmcp",
+  docsHome: "https://docs.mcp-b.ai",
+  examples: "https://docs.mcp-b.ai/tutorials",
+  globalPackage: "https://docs.mcp-b.ai/packages/global/overview",
+  quickStart: "https://docs.mcp-b.ai/start-here/choose-your-path",
+  reactFramework: "https://docs.mcp-b.ai/tutorials/first-react-tool",
+  reactPackage: "https://docs.mcp-b.ai/packages/react-webmcp/overview",
+  schemas: "https://docs.mcp-b.ai/how-to/use-schemas-and-structured-output",
+  security: "https://docs.mcp-b.ai/explanation/design/security-and-human-in-the-loop",
+} as const;
+
 export function Header() {
   return (
     <header className="mx-auto flex h-[88px] w-full max-w-screen-2xl items-center justify-center">
@@ -23,9 +37,7 @@ export function Header() {
 
           <div className="space-y-1">
             <p className="text-lg font-medium leading-6">Big Calendar</p>
-            <p className="text-sm text-muted-foreground">
-              WebMCP Demo
-            </p>
+            <p className="text-sm text-muted-foreground">WebMCP Demo</p>
           </div>
         </div>
 
@@ -41,61 +53,61 @@ export function Header() {
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>Getting Started</DropdownMenuLabel>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/quickstart" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.quickStart} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
                   Quick Start
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/concepts/overview" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.concepts} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
                   Core Concepts
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/concepts/architecture" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.reactFramework} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
-                  Architecture Overview
+                  First React Tool
                 </Link>
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Packages</DropdownMenuLabel>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/packages/react-webmcp" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.reactPackage} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
                   @mcp-b/react-webmcp
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/packages/global" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.globalPackage} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
                   @mcp-b/global
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/calling-tools/embedded-agent" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.architecture} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
-                  Embedded Agent
+                  Architecture Overview
                 </Link>
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Guides</DropdownMenuLabel>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/best-practices" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.bestPractices} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
                   Best Practices
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/concepts/schemas" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.schemas} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
                   Tool Schemas & Validation
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai/security" target="_blank" className="cursor-pointer">
+                <Link href={DOCS_LINKS.security} target="_blank" className="cursor-pointer">
                   <ExternalLink size={14} className="mr-2" />
                   Security Best Practices
                 </Link>
@@ -103,7 +115,7 @@ export function Header() {
 
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="https://docs.mcp-b.ai" target="_blank" className="cursor-pointer font-medium">
+                <Link href={DOCS_LINKS.docsHome} target="_blank" className="cursor-pointer font-medium">
                   <BookOpen size={14} className="mr-2" />
                   View All Documentation
                   <ArrowUpRight size={12} className="ml-auto" />
@@ -114,23 +126,15 @@ export function Header() {
 
           {/* Live Demo Link */}
           <Button variant="ghost" size="sm" asChild>
-            <Link
-              href="https://docs.mcp-b.ai/live-tool-examples"
-              target="_blank"
-              className="gap-1.5"
-            >
-              Live Demo
+            <Link href={DOCS_LINKS.quickStart} target="_blank" className="gap-1.5">
+              Start Here
               <ArrowUpRight size={14} />
             </Link>
           </Button>
 
           {/* Examples Link */}
           <Button variant="ghost" size="sm" asChild>
-            <Link
-              href="https://docs.mcp-b.ai/examples"
-              target="_blank"
-              className="gap-1.5"
-            >
+            <Link href={DOCS_LINKS.examples} target="_blank" className="gap-1.5">
               Examples
               <ArrowUpRight size={14} />
             </Link>

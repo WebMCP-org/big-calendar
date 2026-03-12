@@ -1,7 +1,9 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Calendar, Clock, Text, User } from "lucide-react";
+import { Calendar, Clock, Text, Trash2, User } from "lucide-react";
+
+import { useEventDialog } from "@/calendar/contexts/event-dialog-context";
 
 import { Button } from "@/components/ui/button";
 import { EditEventDialog } from "@/calendar/components/dialogs/edit-event-dialog";
@@ -17,6 +19,7 @@ interface IProps {
 export function EventDetailsDialog({ event, children }: IProps) {
   const startDate = parseISO(event.startDate);
   const endDate = parseISO(event.endDate);
+  const { openDeleteDialog } = useEventDialog();
 
   return (
     <>
@@ -63,6 +66,15 @@ export function EventDetailsDialog({ event, children }: IProps) {
           </div>
 
           <DialogFooter>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => openDeleteDialog(event, { source: "human" })}
+            >
+              <Trash2 className="mr-1 size-4" />
+              Delete
+            </Button>
             <EditEventDialog event={event}>
               <Button type="button" variant="outline">
                 Edit
