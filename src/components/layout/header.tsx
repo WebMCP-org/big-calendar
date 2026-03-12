@@ -36,8 +36,8 @@ export function Header() {
           </div>
 
           <div className="space-y-1">
-            <p className="text-lg font-medium leading-6">Big Calendar</p>
-            <p className="text-sm text-muted-foreground">WebMCP Demo</p>
+            <p className="text-lg font-medium leading-6">WebMCP Calendar</p>
+            <p className="text-sm text-muted-foreground">Try asking your AI to manage your events</p>
           </div>
         </div>
 
